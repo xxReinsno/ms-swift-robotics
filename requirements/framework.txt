@@ -17,6 +17,7 @@ matplotlib
 modelscope>=1.23
 nltk
 numpy
+omegaconf
 openai
 oss2
 pandas
@@ -35,6 +36,6 @@ tiktoken
 tqdm
 transformers>=4.33,<4.58
 transformers_stream_generator
-trl>=0.15,<0.24
+trl>=0.15,<0.25
 uvicorn
 zstandard

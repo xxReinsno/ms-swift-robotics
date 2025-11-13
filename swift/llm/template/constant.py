@@ -36,6 +36,7 @@ class LLMTemplateType:
 
     minimax = 'minimax'
     minimax_m1 = 'minimax_m1'
+    minimax_m2 = 'minimax_m2'
     minimax_vl = 'minimax_vl'
 
     numina = 'numina'
@@ -95,6 +96,7 @@ class LLMTemplateType:
     bluelm = 'bluelm'
     orion = 'orion'
     moonlight = 'moonlight'
+    kimi_k2 = 'kimi_k2'
     mimo_rl = 'mimo_rl'
     dots1 = 'dots1'
     hunyuan_moe = 'hunyuan_moe'
@@ -152,8 +154,11 @@ class MLLMTemplateType:
     llava1_6_yi = 'llava1_6_yi'
     llava_next_qwen = 'llava_next_qwen'
     llama3_llava_next = 'llama3_llava_next'
+    llava_onevision1_5 = 'llava_onevision1_5'
 
     yi_vl = 'yi_vl'
+    ernie_vl = 'ernie_vl'
+    ernie_vl_thinking = 'ernie_vl_thinking'
 
     internvl = 'internvl'
     internvl_phi3 = 'internvl_phi3'

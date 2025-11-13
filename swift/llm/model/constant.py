@@ -105,6 +105,7 @@ class LLMModelType:
 
     minimax = 'minimax'
     minimax_m1 = 'minimax_m1'
+    minimax_m2 = 'minimax_m2'
 
     gemma = 'gemma'
     gemma2 = 'gemma2'
@@ -129,6 +130,7 @@ class LLMModelType:
     polylm = 'polylm'
     aya = 'aya'
     moonlight = 'moonlight'
+    kimi_k2 = 'kimi_k2'
     mimo = 'mimo'
     mimo_rl = 'mimo_rl'
     dots1 = 'dots1'
@@ -214,6 +216,8 @@ class MLLMModelType:
     llava_next_video_yi_hf = 'llava_next_video_yi_hf'
     llava_onevision_hf = 'llava_onevision_hf'
     yi_vl = 'yi_vl'
+    ernie_vl = 'ernie_vl'
+    ernie_vl_thinking = 'ernie_vl_thinking'
 
     llava_llama3_1_hf = 'llava_llama3_1_hf'  # DaozeZhang
     llava_llama3_hf = 'llava_llama3_hf'  # xtuner
@@ -222,6 +226,7 @@ class MLLMModelType:
     llava1_6_yi = 'llava1_6_yi'
     llava_next_qwen = 'llava_next_qwen'
     llama3_llava_next = 'llama3_llava_next'
+    llava_onevision1_5 = 'llava_onevision1_5'
 
     deepseek_vl = 'deepseek_vl'
     deepseek_vl2 = 'deepseek_vl2'

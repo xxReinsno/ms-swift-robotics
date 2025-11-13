@@ -30,13 +30,13 @@ from swift.llm import MultiModelKeys, RequestConfig, RolloutInferRequest
 from swift.llm.infer.protocol import ChatCompletionResponse, RolloutOutput
 from swift.plugin import MultiTurnScheduler, multi_turns
 from swift.trainers import RolloutTrainerArgumentsMixin
-from swift.utils import empty_cache, get_logger, is_vllm_available, remove_response
+from swift.utils import get_logger, is_vllm_available, remove_response
 from swift.utils.torch_utils import get_current_device
 from .rlhf_mixin import RLHFTrainerMixin
 from .utils import (FlattenedTensorBucket, TensorLoRARequest, _create_parameter_buckets,
-                    _process_bucket_with_flattened_tensor, get_even_process_data, get_gather_if_zero3_context,
-                    patch_lora_merge, patch_lora_unmerge, patch_profiling_context, patch_profiling_decorator,
-                    patch_vllm_load_adapter, set_expandable_segments)
+                    _process_bucket_with_flattened_tensor, aggressive_empty_cache, get_even_process_data,
+                    get_gather_if_zero3_context, patch_lora_merge, patch_lora_unmerge, patch_profiling_context,
+                    patch_profiling_decorator, patch_vllm_load_adapter, set_expandable_segments)
 
 DataType = List[Dict[str, Union[torch.Tensor, Any]]]
 logger = get_logger()
@@ -358,6 +358,12 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
         else:
             self._move_adapter_to_vllm()
 
+        # Reset prefix cache
+        if self.vllm_mode == 'server' and self.accelerator.is_main_process:
+            self.vllm_client.reset_prefix_cache()
+        elif self.vllm_mode == 'colocate':
+            self.engine.engine.reset_prefix_cache()
+
     def _move_adapter_to_vllm(self):
         """Transfer LoRA adapter weights to vLLM engine"""
         lora_params = OrderedDict()
@@ -464,12 +470,6 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
 
         if is_peft:
             self.base_sync_done = True
-
-        # Reset prefix cache
-        if self.vllm_mode == 'server' and self.accelerator.is_main_process:
-            self.vllm_client.reset_prefix_cache()
-        elif self.vllm_mode == 'colocate':
-            self.engine.engine.reset_prefix_cache()
 
     def _rollout(self,
                  inputs: Optional[DataType],
@@ -645,9 +645,11 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
 
         context = self.offload_context if self.enable_offload else nullcontext
         with context():
-            set_expandable_segments(False)
+
             if (self.vllm_mode == 'colocate' and self.engine.inner_model_executor.is_sleeping
                     and 'tags' in inspect.signature(self.engine.engine.wake_up).parameters):
+                aggressive_empty_cache()
+                set_expandable_segments(False)
                 self.engine.engine.wake_up(tags=['kv_cache'])
 
             if hasattr(self, 'async_generate') and self.async_generate:
@@ -671,8 +673,8 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
             if self.vllm_mode == 'colocate' and args.sleep_level > 0:
                 self.engine.engine.reset_prefix_cache()
                 self.engine.engine.sleep(level=args.sleep_level)
-                empty_cache()
-            set_expandable_segments(True)
+                aggressive_empty_cache()
+                set_expandable_segments(True)
         return outputs
 
     def _preprocess_inputs(self, inputs: DataType) -> DataType:
@@ -786,7 +788,7 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
         use_tqdm: Optional[bool] = False,
     ) -> List[RolloutOutput]:
         """Perform inference using configured engine"""
-        with patch_profiling_context(self, 'generate'):
+        with patch_profiling_context(self, 'generate'), self._disable_sp_context():
             if self.vllm_mode == 'server':
                 res = self.vllm_client.infer([asdict(req) for req in infer_requests],
                                              asdict(request_config),
@@ -1023,6 +1025,15 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
                 request['images'] = ([_process_image_data(img) for img in request['images']] if isinstance(
                     request['images'], list) else _process_image_data(request['images']))
 
+        # load tools json
+        for request_data in requests_dicts:
+            if 'tools' in request_data and isinstance(request_data['tools'], str):
+                from json import JSONDecodeError
+                try:
+                    request_data['tools'] = json.loads(request_data['tools'])
+                except JSONDecodeError:
+                    pass
+
         return [from_dict(RolloutInferRequest, request_data) for request_data in requests_dicts]
 
     def async_generate_rollout(self, all_inputs):
@@ -1089,3 +1100,36 @@ class RolloutTrainerMixin(RLHFTrainerMixin):
             self._last_loaded_step = self.state.global_step
         results = self._infer_single_or_multi_turn(all_inputs, self.request_config, is_global_inputs=True)
         self._queue.put(DataCache(results))
+
+    @contextmanager
+    def _disable_sp_context(self):
+        from swift.trainers.sequence_parallel import sequence_parallel
+        from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+
+        # Save original SP state
+        origin_size = sequence_parallel.world_size
+
+        # Save and restore original attention functions
+        flash_attn_backup = None
+        sdpa_backup = None
+        if 'flash_attention_2_origin' in ALL_ATTENTION_FUNCTIONS:
+            flash_attn_backup = ALL_ATTENTION_FUNCTIONS['flash_attention_2']
+            ALL_ATTENTION_FUNCTIONS['flash_attention_2'] = ALL_ATTENTION_FUNCTIONS['flash_attention_2_origin']
+        if 'sdpa_origin' in ALL_ATTENTION_FUNCTIONS:
+            sdpa_backup = ALL_ATTENTION_FUNCTIONS['sdpa']
+            ALL_ATTENTION_FUNCTIONS['sdpa'] = ALL_ATTENTION_FUNCTIONS['sdpa_origin']
+
+        # Disable SP
+        sequence_parallel.world_size = 1
+
+        try:
+            yield
+        finally:
+            # Restore SP state
+            sequence_parallel.world_size = origin_size
+
+            # Restore patched attention functions
+            if flash_attn_backup is not None:
+                ALL_ATTENTION_FUNCTIONS['flash_attention_2'] = flash_attn_backup
+            if sdpa_backup is not None:
+                ALL_ATTENTION_FUNCTIONS['sdpa'] = sdpa_backup

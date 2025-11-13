@@ -94,7 +94,7 @@ class SeedTemplate(Template):
             return '\n'.join(result)
         else:
             return ('<seed:cot_budget_reflect>The current thinking budget is 0, so I will '
-                    'directly start answering the question.</seed:cot_budget_reflect>\n\n')
+                    'directly start answering the question.</seed:cot_budget_reflect>\n')
 
     def _prepare_system(self, inputs):
         budget = self.get_thinking_budget(inputs)
@@ -143,10 +143,12 @@ class SeedTemplate(Template):
                             message['content'] = (
                                 '<seed:think><seed:cot_budget_reflect>The current thinking budget is 0, '
                                 'so I will directly start answering the question.'
-                                '</seed:cot_budget_reflect>\n\n</seed:think>') + message['content']
+                                '</seed:cot_budget_reflect>\n</seed:think>') + message['content']
 
     def _simplify_context_list(self, context_list, loss_scale_list, inputs):
         res, res_loss_scale = super()._simplify_context_list(context_list, loss_scale_list, inputs)
+        if not self.use_chat_template:
+            return res, res_loss_scale
         budget = self.get_thinking_budget(inputs)
         if res[-1].endswith('assistant\n') and budget == 0:
             res.append('<seed:think><seed:cot_budget_reflect>')
@@ -154,7 +156,6 @@ class SeedTemplate(Template):
         return res, res_loss_scale
 
     def _jinja_encode(self, inputs: StdTemplateInputs):
-        self._prepare_system(inputs)
         return super()._jinja_encode(inputs)
 
 

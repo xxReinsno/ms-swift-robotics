@@ -123,15 +123,15 @@ def compute_rouge_bleu(preds: List[str], labels: List[str]):
     score_dict = {key: MeanMetric() for key in ['rouge-1', 'rouge-2', 'rouge-l', 'bleu-4']}
 
     for pred, label in zip(preds, labels):
-        hypothesis = list(jieba.cut(pred))
-        reference = list(jieba.cut(label))
+        hypothesis = [w.strip(' ') for w in jieba.cut(pred) if w.strip(' ')]
+        reference = [w.strip(' ') for w in jieba.cut(label) if w.strip(' ')]
         if not hypothesis or not reference:
             continue
         rouge = Rouge()
         scores = rouge.get_scores(' '.join(hypothesis), ' '.join(reference))[0]
         for k, v in scores.items():
             score_dict[k].update(v['f'])
-        bleu_score = sentence_bleu([list(label)], list(pred), smoothing_function=SmoothingFunction().method3)
+        bleu_score = sentence_bleu([reference], hypothesis, smoothing_function=SmoothingFunction().method3)
         score_dict['bleu-4'].update(bleu_score)
 
     return {k: round(v.compute()['value'] * 100, 6) for k, v in score_dict.items()}
@@ -150,7 +150,8 @@ def compute_acc(preds,
                 labels,
                 *,
                 acc_strategy: Literal['token', 'seq'] = 'token',
-                is_encoder_decoder: bool = False) -> Dict[str, List[float]]:
+                is_encoder_decoder: bool = False,
+                cu_seqlens=None) -> Dict[str, List[float]]:
 
     if isinstance(preds, torch.Tensor):
         if torch.is_floating_point(labels):
@@ -168,8 +169,14 @@ def compute_acc(preds,
         acc_list = (preds[masks] == labels[masks]).tolist()
     else:
         acc_list = []
-        for i, m in enumerate(masks):
-            acc_list.append(np.all(preds[i, m] == labels[i, m]))
+        if cu_seqlens is not None and masks.shape[0] == 1:
+            # padding_free
+            for i in range(cu_seqlens.shape[0] - 1):
+                start, end = cu_seqlens[i], cu_seqlens[i + 1]
+                acc_list.append(np.all(preds[0, start:end] == labels[0, start:end]))
+        else:
+            for i, m in enumerate(masks):
+                acc_list.append(np.all(preds[i, m] == labels[i, m]))
     return {f'{acc_strategy}_acc' if preds.ndim >= 2 else 'acc': acc_list}
 
 

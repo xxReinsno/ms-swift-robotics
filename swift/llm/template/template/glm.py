@@ -117,10 +117,16 @@ class GLM4VTemplate(Template):
 class GLM4_1VTemplate(Template):
     begin_of_image_token = 151339
     end_of_image_token = 151340
-    image_token = 151343
     begin_of_video_token = 151341
     end_of_video_token = 151342
-    video_token = 151344
+    placeholder_tokens = ['<|image|>', '<|video|>']
+
+    def init_processor(self, processor) -> None:
+        if processor is None:
+            return
+        super().init_processor(processor)
+        self.image_token = self._tokenize('<|image|>')[0]
+        self.video_token = self._tokenize('<|video|>')[0]
 
     def replace_tag(self, media_type: Literal['image', 'video', 'audio'], index: int,
                     inputs: StdTemplateInputs) -> List[Context]:
@@ -311,12 +317,15 @@ class GLM4_5VTemplate(GLM4_5Template):
         return packed
 
     def _get_position_ids(self, inputs: Dict[str, Any]):
-        base_model = self.get_base_model(self.model)
+        base_model = self.get_base_model(self._get_model())
+        attention_mask = inputs.get('attention_mask_2d')
+        if attention_mask is None:
+            attention_mask = inputs.get('attention_mask')
         position_ids, _ = base_model.model.get_rope_index(
             inputs['input_ids'],
             inputs.get('image_grid_thw'),
             inputs.get('video_grid_thw'),
-            attention_mask=inputs.get('attention_mask'))
+            attention_mask=attention_mask)
         return self._concat_text_position_ids(position_ids)
 
     def _post_encode(self, model, inputs: Dict[str, Any]) -> Dict[str, Any]:

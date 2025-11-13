@@ -157,6 +157,7 @@ class SwiftArgumentsMixin(RLHFArgumentsMixin, TrainArgumentsMixin):
     padding_side: Optional[str] = None
     padding_free: Optional[bool] = None
     task_type: Optional[str] = None
+    problem_type: Optional[str] = None
 
     def __post_init__(self):
         if hasattr(self, 'output_dir'):
@@ -274,6 +275,8 @@ class RolloutTrainerArgumentsMixin(VllmArguments):
     offload_optimizer: bool = False
     offload_model: bool = False
 
+    wandb_log_unique_prompts: Optional[bool] = None
+
 
 @dataclass
 class GRPOArgumentsMixin(RolloutTrainerArgumentsMixin):
@@ -314,7 +317,7 @@ class GRPOArgumentsMixin(RolloutTrainerArgumentsMixin):
     soft_cache_length: Optional[int] = None
 
     # Dr. GRPO, https://arxiv.org/abs/2503.20783
-    scale_rewards: bool = True
+    scale_rewards: Optional[Literal['group', 'batch', 'none']] = None
 
     # entropy
     log_entropy: bool = False
@@ -324,7 +327,11 @@ class GRPOArgumentsMixin(RolloutTrainerArgumentsMixin):
     # GSPO https://www.arxiv.org/abs/2507.18071
     importance_sampling_level: Literal['token', 'sequence', 'sequence_token'] = 'token'
 
-    wandb_log_unique_prompts: Optional[bool] = None
+    # RLOO, REINFORCE++
+    advantage_estimator: Literal['grpo', 'rloo', 'reinforce_plus_plus'] = 'grpo'
+    # If false, add KL into loss, otherwise add into reward
+    kl_in_reward: Optional[bool] = None  # rloo/reinforce_plus_plus: true, grpo: false (default)
+
     generation_batch_size: Optional[int] = None
     steps_per_generation: Optional[int] = None
 

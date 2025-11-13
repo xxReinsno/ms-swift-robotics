@@ -998,6 +998,8 @@ class Template(ProcessorMixin):
         kwargs = {}
         if inputs.tools:
             kwargs['tools'] = inputs.tools
+        if 'thinking_budget' in inputs.extra_kwargs:
+            kwargs['thinking_budget'] = inputs.extra_kwargs.get('thinking_budget', 0)
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=add_generation_prompt, **kwargs)
         answer_len = 1 if self.is_training else 0
@@ -1685,6 +1687,7 @@ class Template(ProcessorMixin):
                 assert res['attention_mask'].dtype is torch.bool, f'attention_mask.dtype: {res["attention_mask"].dtype}'
                 for i, seq_len in enumerate(seq_lens):
                     res['attention_mask'][i, :, seq_len:] = 0
+                res['attention_mask'] = ~res['attention_mask']
 
         for key, pad_value in zip(keys, pad_values):
             if key not in res:

@@ -26,6 +26,7 @@ Swift DOCUMENTATION
    Instruction/Sample.md
    Instruction/Evaluation.md
    Instruction/Export-and-push.md
+   Instruction/Ray.md
    Instruction/Reinforced-Fine-tuning.md
    Instruction/Agent-support.md
    Instruction/Supported-models-and-datasets.md
@@ -40,6 +41,7 @@ Swift DOCUMENTATION
    Megatron-SWIFT/Command-line-parameters.md
    Megatron-SWIFT/LoRA-Training.md
    Megatron-SWIFT/Multimodal-Model.md
+   Megatron-SWIFT/Mcore-Bridge.md
 
 
 .. toctree::

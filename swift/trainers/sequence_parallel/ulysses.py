@@ -1,7 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import math
 from functools import partial
-from types import MethodType
+from types import MethodType, SimpleNamespace
 from typing import Any, Optional, Tuple
 
 import torch
@@ -200,6 +200,21 @@ class SequenceParallel:
             masking_utils.flash_attention_mask = flash_attention_mask
             masking_utils.ALL_MASK_ATTENTION_FUNCTIONS._global_mapping['flash_attention_2'] = flash_attention_mask
 
+            def sdpa_mask(batch_size, cache_position, kv_length, *args, **kwargs):
+                device = cache_position.device
+                cache_position = self.real_position_ids[0]
+                cache_position = self.pad(cache_position, padding_value=-1, position_ids=self.real_position_ids, dim=0)
+                cache_position = torch.arange(0, cache_position.shape[0], device=device)
+                kv_length = cache_position.shape[0]
+                return masking_utils.ALL_MASK_ATTENTION_FUNCTIONS._global_mapping['sdpa_origin'](batch_size,
+                                                                                                 cache_position,
+                                                                                                 kv_length, *args,
+                                                                                                 **kwargs)
+
+            masking_utils.ALL_MASK_ATTENTION_FUNCTIONS._global_mapping[
+                'sdpa_origin'] = masking_utils.ALL_MASK_ATTENTION_FUNCTIONS._global_mapping['sdpa']
+            masking_utils.ALL_MASK_ATTENTION_FUNCTIONS._global_mapping['sdpa'] = sdpa_mask
+
             def create_causal_mask(config, input_embeds, attention_mask, cache_position, *args, **kwargs):
                 input_embeds = torch.ones(
                     (input_embeds.shape[0], input_embeds.shape[1] * self.sp_world_size, input_embeds.shape[2]),
@@ -330,7 +345,6 @@ class SequenceParallel:
 
         def pre_forward_split_hook(_self, args, kwargs):
             input_ids = kwargs.get('input_ids', None)
-            unsplit_input_ids = input_ids
             inputs_embeds = kwargs.get('inputs_embeds', None)
             position_ids = kwargs['position_ids']
             attention_mask = kwargs.get('attention_mask', None)
@@ -351,65 +365,9 @@ class SequenceParallel:
             kwargs['inputs_embeds'] = inputs_embeds
             kwargs['position_ids'] = position_ids
             kwargs['attention_mask'] = attention_mask
-
-            if _self.__class__.__name__ == 'Qwen3VLModel':
-
-                def pad_split_mm_tokens(token_id, mm_embeds):
-                    special_mask = unsplit_input_ids == token_id
-                    unsplit_inputs_embeds = embed_tokens(unsplit_input_ids)
-
-                    unsplit_inputs_embeds = unsplit_inputs_embeds.clone()
-                    unsplit_inputs_embeds[special_mask] = mm_embeds
-
-                    _, split_input_embeds, _, _, _, _, extra_values = self.pad_and_split_inputs(
-                        None,
-                        unsplit_inputs_embeds,
-                        None,
-                        None,
-                        None,
-                        None,
-                        embed_tokens,
-                        self.real_position_ids,
-                        extra_split_values=[(special_mask, 0, -1)])
-                    split_special_mask = extra_values[0]
-                    return split_input_embeds[split_special_mask]
-
-                def get_features(module, token_id, pixel_values, image_grid_thw=None):
-                    image_embeds, deepstack_image_embeds = module.origin_get_image_features(
-                        pixel_values, image_grid_thw)
-                    image_embeds = torch.cat(
-                        image_embeds, dim=0).to(embed_tokens.weight.device, embed_tokens.weight.dtype)
-                    if image_embeds is not None:
-                        image_embeds = pad_split_mm_tokens(token_id, image_embeds)
-                    if len(deepstack_image_embeds) > 0:
-                        for i in range(len(deepstack_image_embeds)):
-                            deepstack_image_embeds[i] = pad_split_mm_tokens(token_id, deepstack_image_embeds[i])
-                    return (image_embeds, ), deepstack_image_embeds
-
-                def get_video_features(module, pixel_values_videos, video_grid_thw=None):
-                    return get_features(module, module.config.video_token_id, pixel_values_videos, video_grid_thw)
-
-                def get_image_features(module, pixel_values, image_grid_thw=None):
-                    return get_features(module, module.config.image_token_id, pixel_values, image_grid_thw)
-
-                if not hasattr(_self, 'origin_get_image_features'):
-                    _self.origin_get_image_features = _self.get_image_features
-                    _self.get_image_features = MethodType(get_image_features, _self)
-                    _self.origin_get_video_features = _self.get_video_features
-                    _self.get_video_features = MethodType(get_video_features, _self)
-
             return args, kwargs
 
         base_model.register_forward_pre_hook(pre_forward_split_hook, with_kwargs=True)
-
-        def post_forward_hook(module, *args, **kwargs):
-            if hasattr(module, 'origin_get_image_features'):
-                module.get_image_features = module.origin_get_image_features
-                del module.origin_get_image_features
-                module.get_video_features = module.origin_get_video_features
-                del module.origin_get_video_features
-
-        base_model.register_forward_hook(post_forward_hook)
 
     def _prepare_moe_aux_loss(self, base_model: torch.nn.Module):
 
@@ -615,6 +573,27 @@ class SequenceParallel:
             output = tensor_list[rank].contiguous()
             return output
 
+    def pad_and_split_mm_tokens(self, visual_mask, mm_embeds):
+        input_ids = self.extra_kwargs['input_ids']
+        empty_embeds = torch.empty(
+            (input_ids.shape[0], input_ids.shape[1], mm_embeds.shape[-1])).to(mm_embeds.device).to(mm_embeds.dtype)
+        empty_embeds[visual_mask] = mm_embeds
+
+        embeds = SimpleNamespace(weight=mm_embeds)
+
+        _, split_input_embeds, _, _, _, _, extra_values = self.pad_and_split_inputs(
+            None,
+            empty_embeds,
+            None,
+            None,
+            None,
+            None,
+            embeds,
+            self.real_position_ids,
+            extra_split_values=[(visual_mask, 0, -1)])
+        visual_mask = extra_values[0]
+        return visual_mask, split_input_embeds[visual_mask]
+
     def pad_and_split_inputs(self,
                              input_ids,
                              input_embeds,
@@ -648,11 +627,14 @@ class SequenceParallel:
         tokenizer = self.tokenizer
         real_position_ids = real_position_ids if real_position_ids is not None else position_ids
         extra_values = []
-        if real_position_ids is not None and real_position_ids.shape[0] == 1:
+        batch_size = input_ids.shape[
+            0] if input_ids is not None else input_embeds.shape[0] if input_embeds is not None else None
+        if real_position_ids is not None and batch_size is not None and real_position_ids.shape[0] == batch_size:
             # TODO clone everytime, but the position_ids is a small tensor
             self.extra_kwargs['text_position_ids'] = real_position_ids.clone()
         if input_ids is not None:
             input_ids = self.pad(input_ids, padding_value=tokenizer.pad_token_id, position_ids=real_position_ids)
+            self.extra_kwargs['input_ids'] = input_ids.clone()
         if input_embeds is not None:
             pad_emb = torch.zeros(
                 (1, embed_tokens.weight.shape[-1])).to(embed_tokens.weight.device).to(embed_tokens.weight.dtype)
@@ -775,10 +757,13 @@ class SequenceParallel:
         """
         position_ids = None
         position_ids = inputs.get('text_position_ids')
+        input_ids = inputs.get('input_ids')
         if position_ids is None:
             position_ids = inputs.get('position_ids')
-        if position_ids is not None and position_ids.shape[0] == 1:
+        if position_ids is not None and input_ids is not None and position_ids.shape[0] == input_ids.shape[0]:
             self.extra_kwargs['text_position_ids'] = position_ids.clone()
+        if input_ids is not None:
+            self.extra_kwargs['input_ids'] = input_ids.clone()
         if 'labels' in inputs:
             labels = inputs['labels']
             _, _, labels, _, _, _, _ = self.pad_and_split_inputs(
