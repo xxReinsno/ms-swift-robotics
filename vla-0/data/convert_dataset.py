@@ -68,8 +68,8 @@ def convert_dataset_format(input_file_path, output_file_path):
 # 3. 运行此脚本，它会生成一个名为 `train_converted.jsonl` 的新文件。
 
 # 定义输入和输出文件名
-source_file = '/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla/train.jsonl'
-destination_file = '/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla/train_converted.jsonl'
+source_file = '/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla/train.jsonl'
+destination_file = '/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla/train_converted_4.jsonl'
 
 # 执行转换
 convert_dataset_format(source_file, destination_file)
