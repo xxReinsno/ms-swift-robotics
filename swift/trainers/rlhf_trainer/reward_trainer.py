@@ -26,7 +26,11 @@ class RewardTrainer(RLHFTrainerMixin, SwiftMixin, HFRewardTrainer):
         super().__init__(*args, **kwargs)
         try:
             from trl.models import get_act_offloading_ctx_manager
+<<<<<<< Updated upstream
             if self.args.activation_offloading:
+=======
+            if getattr(self.args, 'activation_offloading', False):
+>>>>>>> Stashed changes
                 self.maybe_activation_offload_context = get_act_offloading_ctx_manager(model=self.model)
             else:
                 self.maybe_activation_offload_context = nullcontext()
