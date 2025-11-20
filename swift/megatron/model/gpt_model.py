@@ -303,27 +303,6 @@ class GPTModel(McoreGPTModel):
             )
 
         args = get_args()
-<<<<<<< Updated upstream
-        return self._postprocess(
-            hidden_states=hidden_states,
-            input_ids=input_ids,
-            position_ids=position_ids,
-            labels=labels if args.task_type == 'causal_lm' else None,
-            rotary_pos_emb=rotary_pos_emb,
-            rotary_pos_cos=rotary_pos_cos,
-            rotary_pos_sin=rotary_pos_sin,
-            mtp_in_postprocess=self.mtp_process,
-            loss_mask=loss_mask,
-            decoder_input=decoder_input,
-            attention_mask=attention_mask,
-            inference_params=inference_params,
-            packed_seq_params=packed_seq_params,
-            sequence_len_offset=sequence_len_offset,
-            runtime_gather_output=runtime_gather_output,
-            extra_block_kwargs=extra_block_kwargs,
-            inference_context=inference_context,
-        )
-=======
         labels = labels if args.task_type == 'causal_lm' else None
         if mcore_013:
             return self._postprocess(
@@ -371,7 +350,6 @@ class GPTModel(McoreGPTModel):
             loss = self.compute_language_model_loss(labels, logits)
 
             return loss
->>>>>>> Stashed changes
 
     def get_input_tensor(self):
         return self.decoder.input_tensor

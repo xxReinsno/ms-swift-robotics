@@ -53,15 +53,9 @@ MAX_JOBS=8 pip install "flash-attn<2.8.2" --no-build-isolation
 
 Alternatively, you can also use the image: (See historical images [here](../GetStarted/SWIFT-installation.md#mirror))
 ```
-<<<<<<< Updated upstream
-modelscope-registry.cn-hangzhou.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.8.1-py311-torch2.8.0-vllm0.11.0-modelscope1.31.0-swift3.9.3
-modelscope-registry.cn-beijing.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.8.1-py311-torch2.8.0-vllm0.11.0-modelscope1.31.0-swift3.9.3
-modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.8.1-py311-torch2.8.0-vllm0.11.0-modelscope1.31.0-swift3.9.3
-=======
 modelscope-registry.cn-hangzhou.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.8.1-py311-torch2.8.0-vllm0.11.0-modelscope1.31.0-swift3.10.1
 modelscope-registry.cn-beijing.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.8.1-py311-torch2.8.0-vllm0.11.0-modelscope1.31.0-swift3.10.1
 modelscope-registry.us-west-1.cr.aliyuncs.com/modelscope-repo/modelscope:ubuntu22.04-cuda12.8.1-py311-torch2.8.0-vllm0.11.0-modelscope1.31.0-swift3.10.1
->>>>>>> Stashed changes
 ```
 
 Recommended Operating Environment:
@@ -73,19 +67,11 @@ Recommended Operating Environment:
 | torch        | >=2.0        | 2.7.1/2.8.0    |                    |
 | transformer_engine    | >=2.3       |         |                  |
 | apex |   |  0.1 | |
-<<<<<<< Updated upstream
-| megatron_core    |        | 0.14      |                  |
-| flash_attn    |        | 2.8.1/3.0.0b1   |                  |
-| transformers | >=4.33       | 4.57.1      |                    |
-| modelscope   | >=1.23       |             |                    |
-| peft         | >=0.11,<0.18 |             |      LoRA          |
-=======
 | megatron_core    |    >=0.12    | 0.14      |                  |
 | flash_attn    |        | 2.8.1/3.0.0b1   |                  |
 | transformers | >=4.33       | 4.57.1      |                    |
 | modelscope   | >=1.23       |             |                    |
 | peft         | >=0.11,<0.19 |             |      LoRA          |
->>>>>>> Stashed changes
 | trl          | >=0.15,<0.25 |       |      RLHF        |
 
 

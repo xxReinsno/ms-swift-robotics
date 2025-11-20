@@ -14,11 +14,7 @@ import torch.nn
 from megatron.core import mpu
 from megatron.core.enums import ModelType
 from megatron.core.num_microbatches_calculator import get_num_microbatches
-<<<<<<< Updated upstream
-from megatron.core.optimizer import _update_min_and_max_lr_in_param_groups, param_group_identifier_keys
-=======
 from megatron.core.optimizer import _update_min_and_max_lr_in_param_groups
->>>>>>> Stashed changes
 from megatron.core.pipeline_parallel import get_forward_backward_func
 from megatron.core.rerun_state_machine import RerunMode, get_rerun_state_machine
 from megatron.core.transformer.module import MegatronModule
@@ -75,12 +71,6 @@ class BaseMegatronTrainer(ABC):
             'eval': collections.defaultdict(_get_mean_metric)
         }
         self.mcore_013 = version.parse(megatron.core.__version__) >= version.parse('0.13.0rc0')
-
-    @property
-    def bridge(self):
-        if self._bridge is None:
-            self._bridge = self.args.megatron_model_meta.bridge_cls()
-        return self._bridge
 
     @property
     def bridge(self):
@@ -387,12 +377,8 @@ class BaseMegatronTrainer(ABC):
             }
             # Ensure param_group has required keys for matching when loading optimizer state
             # See MegatronOptimizer._filter_and_reorder_param_groups.
-<<<<<<< Updated upstream
-            assert set(param_group.keys()) - set(param_group_identifier_keys) == {'params'}
-=======
             if param_group_identifier_keys is not None:
                 assert set(param_group.keys()) - set(param_group_identifier_keys) == {'params'}
->>>>>>> Stashed changes
             param_groups.append(param_group)
 
         param_groups = _update_min_and_max_lr_in_param_groups(

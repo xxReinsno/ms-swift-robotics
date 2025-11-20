@@ -448,11 +448,7 @@ def infonce_loss(outputs, labels, loss_scale=None, num_items_in_batch=None, **kw
                 similarity_matrix = torch.cat(logits_list, dim=1)
             # temperature scaling and CE
             similarity_matrix = similarity_matrix / temperature
-<<<<<<< Updated upstream
-            loss = nn.CrossEntropyLoss()(similarity_matrix, labels) / world_size  # avoid duplicate
-=======
             loss = nn.CrossEntropyLoss()(similarity_matrix, labels)
->>>>>>> Stashed changes
         else:
             all_tensors = []
             for tensor in split_tensors:
@@ -751,12 +747,9 @@ def listwise_generative_reranker_loss(outputs,
     batch_indices = torch.arange(batch_size, device=logits.device)
     last_valid_logits = logits[batch_indices, last_valid_indices, :]
 
-<<<<<<< Updated upstream
-=======
     positive_logits = last_valid_logits[:, positive_token_id]  # [batch_size]
     negative_logits = last_valid_logits[:, negative_token_id]  # [batch_size]
 
->>>>>>> Stashed changes
     logits = F.logsigmoid(positive_logits - negative_logits)
 
     # Find positive sample indices to determine group boundaries

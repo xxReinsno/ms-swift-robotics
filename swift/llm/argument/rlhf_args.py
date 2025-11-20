@@ -347,12 +347,7 @@ class RLHFArguments(TeacherModelArguments, GRPOArguments, PPOArguments, RewardMo
             raise ValueError('GRPO with vLLM is not compatible with `device_map`. '
                              'Please set NPROC_PER_NODE equal to num_processes.')
         if self.use_liger_kernel:
-<<<<<<< Updated upstream
-            import liger_kernel
-            liger_kernel_version = version.parse(liger_kernel.__version__)
-=======
             liger_kernel_version = version.parse(importlib.metadata.version('liger-kernel'))
->>>>>>> Stashed changes
             assert trl_version >= version.parse('0.18')
             if self.delta is not None:
                 raise ValueError('Liger loss does not support two-sided GRPO loss yet.')

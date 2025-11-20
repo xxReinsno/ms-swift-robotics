@@ -3,10 +3,7 @@ Developer Guide
 .. toctree::
    :maxdepth: 1
 
-<<<<<<< Updated upstream
-=======
    loss_types.md
->>>>>>> Stashed changes
    multi_turn.md
    multi_task.md
    reward_function.md

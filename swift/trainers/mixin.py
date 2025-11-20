@@ -908,11 +908,7 @@ class SwiftMixin:
         else:
             super().create_optimizer_and_scheduler(num_training_steps=num_training_steps)
 
-<<<<<<< Updated upstream
-    def _compute_acc(self, outputs, labels, cu_seqlens=None) -> None:
-=======
     def _compute_acc(self, outputs, labels, cu_seqlens=None, attention_mask=None) -> None:
->>>>>>> Stashed changes
         args = self.args
         logits = outputs.logits
         metrics = None

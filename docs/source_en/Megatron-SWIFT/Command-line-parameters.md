@@ -276,20 +276,6 @@ LoRA Training:
 - merge_lora: Whether to store merged weights. Defaults to None. If `save_safetensors` is set to True, this parameter defaults to `True`; otherwise, it defaults to False. That is, by default, LoRA will be merged when storing in safetensors format; LoRA will not be merged when storing in torch_dist format.
 - max_shard_size: Maximum file size for safetensors format storage, defaults to '5GB'.
 
-**Mcore-Bridge Parameters**
-
-- 🔥load_safetensors: Defaults to False. Whether to load weights directly from safetensors.
-- 🔥save_safetensors: Defaults to False. Whether to save directly as safetensors weights. Note: if this parameter is set to True, optimizer weights, random number states, and other checkpoint resumption contents will not be stored.
-- model: The model_id or model_path of safetensors weights. Defaults to None.
-- model_type: Model type. For details, refer to [ms-swift command-line parameters documentation](../Instruction/Command-line-parameters.md).
-- adapters: adapter_id or adapter_path of LoRA incremental weights in safetensors format. Default is `[]`.
-- ref_model: model_id or model_path of ref_model safetensors weights. Required when using DPO or KTO algorithms with full-parameter training. Default is None, set to `--model`.
-- ref_adapters: List of adapter_id or adapter_path of ref_adapters safetensors weights (currently only supports length of 1). Default is `[]`.
-- use_hf: Controls whether to use ModelScope or HuggingFace for model download, dataset download, and model push. Default is False, using ModelScope.
-- hub_token: Hub token. ModelScope hub token can be found [here](https://modelscope.cn/my/myaccesstoken). Default is None.
-- merge_lora: Whether to store merged weights. Defaults to None. If `save_safetensors` is set to True, this parameter defaults to `True`; otherwise, it defaults to False. That is, by default, LoRA will be merged when storing in safetensors format; LoRA will not be merged when storing in torch_dist format.
-- max_shard_size: Maximum file size for safetensors format storage, defaults to '5GB'.
-
 
 ## Training Parameters
 
@@ -332,8 +318,6 @@ In addition to inheriting the training parameters, the following parameters are 
 - calculate_per_token_loss: Overrides the Megatron parameter. Default is False.
 
 
-<<<<<<< Updated upstream
-=======
 ### DPO Parameters
 
 - ref_load: The loading path for the reference model. This must be provided when using DPO/GRPO/KTO algorithms with full-parameter training. Defaults to `None`, which means it will be set to the same value as `load`.
@@ -406,7 +390,6 @@ In addition to inheriting the training parameters, the following parameters are 
 
 Built-in reward function parameters refer to the [documentation](../Instruction/Command-line-parameters.md#reward-function-parameters).
 
->>>>>>> Stashed changes
 ## Export Parameters
 
 This section introduces the parameters for `megatron export` (requires "ms-swift>=3.10"). To use the `swift export` command for exporting, please refer to the [ms-swift Command Line Parameters Documentation](../Instruction/Command-line-parameters.md#export-arguments). Compared to `swift export`, `megatron export` supports distributed and multi-node exporting. Megatron export parameters inherit from Megatron parameters and basic parameters.

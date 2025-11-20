@@ -176,10 +176,7 @@ class BaseArguments(CompatArguments, GenerationArguments, QuantizeArguments, Dat
         TemplateArguments.__post_init__(self)
         DataArguments.__post_init__(self)
         RayArguments.__post_init__(self)
-<<<<<<< Updated upstream
-=======
         self._init_stream()
->>>>>>> Stashed changes
         if self.max_length is None and self.model_info is not None:
             self.max_length = self.model_info.max_model_len
         if self.packing and self.packing_length is None:

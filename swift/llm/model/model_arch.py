@@ -622,11 +622,7 @@ register_model_arch(
 register_model_arch(
     MultiModelKeys(
         MLLMModelArch.ernie_vl,
-<<<<<<< Updated upstream
-        language_model='model',
-=======
         language_model=['model', 'lm_head'],
->>>>>>> Stashed changes
         aligner='model.resampler_model',
         vision_tower='vision_model',
     ))
@@ -721,11 +717,7 @@ register_model_arch(MultiModelKeys(
 register_model_arch(
     MultiModelKeys(
         MLLMModelArch.llava_onevision1_5,
-<<<<<<< Updated upstream
-        language_model='model.language_model',
-=======
         language_model=['model.language_model', 'lm_head'],
->>>>>>> Stashed changes
         aligner='model.visual.merger',
         vision_tower='model.visual',
     ))

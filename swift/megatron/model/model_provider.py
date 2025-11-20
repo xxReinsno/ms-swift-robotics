@@ -33,25 +33,17 @@ def _get_transformer_layer_spec(use_te, config):
     """
     args = get_args()
     if use_te:
-<<<<<<< Updated upstream
-=======
         if mcore_013:
             kwargs = {'qk_l2_norm': args.qk_l2_norm, 'use_kitchen': config.use_kitchen}
         else:
             kwargs = {}
->>>>>>> Stashed changes
         return get_gpt_layer_with_transformer_engine_spec(
             args.num_experts,
             args.moe_grouped_gemm,
             args.qk_layernorm,
             args.multi_latent_attention,
             moe_use_legacy_grouped_gemm=args.moe_use_legacy_grouped_gemm,
-<<<<<<< Updated upstream
-            qk_l2_norm=args.qk_l2_norm,
-            use_kitchen=config.use_kitchen,
-=======
             **kwargs,
->>>>>>> Stashed changes
         )
     else:
         return get_gpt_layer_local_spec(

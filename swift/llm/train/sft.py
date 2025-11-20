@@ -107,21 +107,6 @@ class SwiftSft(SwiftPipeline, TunerMixin):
             append_to_jsonl(val_dataset_path, val_dataset.to_list())
             logger.info(f'The split dataset from the training set will be saved at: {val_dataset_path}.')
 
-<<<<<<< Updated upstream
-    def _get_cached_dataset(self):
-        args = self.args
-        assert not args.streaming and not args.lazy_tokenize
-        train_datasets, val_datasets = [], []
-        for cached_dataset in args.cached_dataset:
-            train_path = os.path.join(cached_dataset, 'train')
-            val_path = os.path.join(cached_dataset, 'val')
-            train_datasets.append(load_from_disk(train_path))
-            if os.path.exists(val_path):
-                val_datasets.append(load_from_disk(val_path))
-        return train_datasets, val_datasets
-
-=======
->>>>>>> Stashed changes
     @RayHelper.function(group='default')
     def _prepare_dataset(self):
         args = self.args

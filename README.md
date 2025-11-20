@@ -75,10 +75,7 @@ You can contact us and communicate with us by adding our group:
 
 
 ## 🎉 News
-<<<<<<< Updated upstream
-=======
 - 🎁 2025.11.14: Megatron GRPO is now available!  Check out the [docs](./docs/source_en/Megatron-SWIFT/GRPO.md) and [examples](examples/megatron/grpo).
->>>>>>> Stashed changes
 - 🎁 2025.11.04: Support for [Mcore-Bridge](docs/source_en/Megatron-SWIFT/Mcore-Bridge.md), making Megatron training as simple and easy to use as transformers.
 - 🎁 2025.10.28: Ray [here](docs/source_en/Instruction/Ray.md).
 - 🎁 2025.10.28: Support [use yaml](examples/yaml) to configure command line parameters.

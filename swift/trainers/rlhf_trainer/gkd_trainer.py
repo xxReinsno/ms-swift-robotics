@@ -10,13 +10,9 @@ from typing import Dict, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-<<<<<<< Updated upstream
-from accelerate.utils import gather_object
-=======
 import trl
 from accelerate.utils import gather_object, is_peft_model
 from packaging import version
->>>>>>> Stashed changes
 from transformers import PreTrainedModel
 from trl import GKDTrainer as HFGKDTrainer
 from trl import SFTTrainer as HFSFTTrainer
@@ -26,9 +22,6 @@ from swift.utils import (JsonlWriter, get_logger, is_swanlab_available, is_wandb
                          unwrap_model_for_generation)
 from ..mixin import SwiftMixin
 from .rollout_mixin import DataType, RolloutTrainerMixin
-<<<<<<< Updated upstream
-from .utils import identity_data_collator, patch_profiling_context, patch_profiling_decorator, prepare_deepspeed
-=======
 from .utils import (get_gather_if_zero3_context, identity_data_collator, patch_profiling_context,
                     patch_profiling_decorator, prepare_deepspeed)
 
@@ -37,7 +30,6 @@ try:
     _liger_kernel_available = True
 except ImportError:
     _liger_kernel_available = False
->>>>>>> Stashed changes
 
 del HFGKDTrainer.__init__
 del HFSFTTrainer.__init__
@@ -67,13 +59,6 @@ class GKDTrainer(RolloutTrainerMixin, SwiftMixin, HFGKDTrainer):
 
         # Initialize logging components
         self._prepare_logging()
-<<<<<<< Updated upstream
-        self.teacher_ds3_gather_for_generation = args.ds3_gather_for_generation
-        # Initialize teacher model
-        if self.is_deepspeed_enabled:
-            if teacher_deepspeed_config is not None:
-                if teacher_deepspeed_config.get('zero_optimization', {}).get('stage') != 3:
-=======
 
         # Initialize liger loss
         self._prepare_liger_loss()
@@ -85,7 +70,6 @@ class GKDTrainer(RolloutTrainerMixin, SwiftMixin, HFGKDTrainer):
             if teacher_deepspeed_config is not None:
                 self.is_teacher_ds3 = teacher_deepspeed_config.get('zero_optimization', {}).get('stage') == 3
                 if not self.is_teacher_ds3:
->>>>>>> Stashed changes
                     self.teacher_ds3_gather_for_generation = False
                 self.teacher_model = prepare_deepspeed(
                     teacher_model, self.accelerator, deepspeed_config=teacher_deepspeed_config, training_args=args)
@@ -403,8 +387,6 @@ class GKDTrainer(RolloutTrainerMixin, SwiftMixin, HFGKDTrainer):
         yield
         self.offload_model(self.accelerator.unwrap_model(self.teacher_model))
 
-<<<<<<< Updated upstream
-=======
     def _prepare_liger_loss(self):
         """Initialize liger loss if enabled."""
         args = self.args
@@ -423,7 +405,6 @@ class GKDTrainer(RolloutTrainerMixin, SwiftMixin, HFGKDTrainer):
             )
             self.use_liger_gkd_loss = True
 
->>>>>>> Stashed changes
     def _prepare_logging(self):
         """Initialize logging components for on-policy rollout tracking."""
         args = self.args

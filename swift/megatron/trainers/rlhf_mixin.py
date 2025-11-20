@@ -1,11 +1,8 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 from contextlib import contextmanager
 
-<<<<<<< Updated upstream
-=======
 import torch
 import torch.distributed as dist
->>>>>>> Stashed changes
 from megatron.core import mpu
 from megatron.training import get_args, get_model
 from megatron.training.checkpointing import load_checkpoint
@@ -59,11 +56,7 @@ class MegatronRLHFTrainer(BaseMegatronTrainer):
                 for m in self.peft_models:
                     m.set_adapter('default')
 
-<<<<<<< Updated upstream
-    def get_logps(self, output_tensor, labels, packed_seq_params, num_samples=None):
-=======
     def get_logps(self, output_tensor, labels, packed_seq_params, num_samples=None, per_token=False):
->>>>>>> Stashed changes
         args = get_args()
         per_token_logps = -output_tensor
         loss_mask = labels != -100
