@@ -39,7 +39,7 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
 
-    model_path = "/home/yuquan002/ssd/ms-swift-robotics/output/qwen3-vl-4b-instruct-vla0-libero/v9-20251107-182735/checkpoint-4096"
+    model_path = "/home/yuquan002/ssd/xyq_ws/ms-swift-robotics/output/qwen3-vl-4b-instruct-vla0-libero/v9-20251107-182735/checkpoint-4096"
 
     logging.info(f"Loading model from {model_path} to device: {device}")
 
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     policy = VLA0Policy(model, processor, device)
 
     # get prompt input from dataset
-    dataset_path = '/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla/train_1k.jsonl'
+    dataset_path = '/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla/train_1k.jsonl'
     with open(dataset_path, 'r') as f:
         lines = f.readlines()
         test_data = [json.loads(line) for line in lines]
@@ -63,8 +63,8 @@ if __name__ == "__main__":
         query_message = test_sample['prompt']
         images = test_sample['image']
         
-        main_image_path = os.path.join('/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla', images[0])
-        wrist_image_path = os.path.join('/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla', images[1])
+        main_image_path = os.path.join('/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla', images[0])
+        wrist_image_path = os.path.join('/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla', images[1])
         main_image = Image.open(main_image_path).convert("RGB")
         wrist_image = Image.open(wrist_image_path).convert("RGB")
 

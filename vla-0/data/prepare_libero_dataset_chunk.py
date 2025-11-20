@@ -33,8 +33,8 @@ PROMPT_TEMPLATE = "task description: {instruction}\n\nimage:\n<image>\n<image>"
 
 
 def main(
-    data_dir: str = "/home/yuquan002/ssd/modified_libero_rlds",
-    output_dir: str = "/home/yuquan002/ssd/libero_vl_dataset",
+    data_dir: str = "/home/yuquan002/ssd/xyq_ws/modified_libero_rlds",
+    output_dir: str = "/home/yuquan002/ssd/xyq_ws/libero_vl_dataset",
     action_quantization_bins: int = 1000,
     future_actions_chunk_size: int = 8, # 定义action chunk的大小
 ):

@@ -7,13 +7,13 @@
 # WANDB_RUN_NAME='Qwen3-VL-4B-Instruct-$(date +%Y%m%d_%H%M%S)' # WandB run name
 export PYTORCH_CUDA_ALLOC_CONF='expandable_segments:True'
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
-export NPROC_PER_NODE=2
-export ROOT_IMAGE_DIR=/home/yuquan002/ssd/libero_vl_dataset
+export NPROC_PER_NODE=6
+export ROOT_IMAGE_DIR=/home/yuquan002/ssd/xyq_ws/libero_vl_dataset
 export WANDB_PROJECT='Qwen3-VL-Robotics'
 export WANDB_RUN_NAME='Qwen3-VL-4B-Instruct-$(date +%Y%m%d_%H%M%S)'
 swift sft \
     --model  Qwen/Qwen3-VL-4B-Instruct \
-    --custom_register_path /home/yuquan002/ssd/ms-swift-robotics/vla-0/data/libero_dataset.py \
+    --custom_register_path /home/yuquan002/ssd/xyq_ws/ms-swift-robotics/vla-0/data/libero_dataset.py \
     --dataset vla0-debug \
     --load_from_cache_file true \
     --report_to tensorboard wandb \

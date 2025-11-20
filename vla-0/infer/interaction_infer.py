@@ -5,14 +5,14 @@ from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 from PIL import Image
 
 
-model_dir = '/home/yuquan002/ssd/ms-swift-robotics/output/qwen3-vl-4b-instruct-vla0-libero/v6-20251029-202919/checkpoint-105984'
+model_dir = '/home/yuquan002/ssd/xyq_ws/VLA0-Reproduce/logs/Qwen3-VL-Robotics-LiberoVLA0-Exp1'
 
 model = Qwen3VLForConditionalGeneration.from_pretrained(model_dir, dtype="auto", device_map="auto")
 
 processor = AutoProcessor.from_pretrained(model_dir)
-main_dir = "/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla/images/00000000_main.jpg"
+main_dir = "/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla/images/00000000_main.jpg"
 main = Image.open(main_dir).convert("RGB")
-wrist_dir = "/home/yuquan002/ssd/libero_vl_dataset/libero_spatial_vla/images/00000000_wrist.jpg"
+wrist_dir = "/home/yuquan002/ssd/xyq_ws/libero_vl_dataset/libero_spatial_vla/images/00000000_wrist.jpg"
 wrist = Image.open(wrist_dir).convert("RGB")
 
 while True:

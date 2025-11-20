@@ -47,8 +47,8 @@ class VLA0Policy:
         self.action_max = 1.0   # assuming action space max
 
         self.system_prompt = (
-            # "Analyze the input image and predict robot actions for the next 5 timesteps. Each action has 7 dimensions. Output a single sequence of 35 integers (0 - 1000 each), representing the 5 timesteps sequentially. Provide only space-separated numbers. Nothing else."
-            "Assume you are a robot control system. Analyze the input image, the task description and the current state to predict the robot's next action. The output should be a sequence of actions wherethe first three values represent 'dx', 'dy', 'dz' for the end-effector's positional movement, the next three values represent 'drx', 'dry', 'drz' for the end-effector's rotational movement, the seventh value indicates the gripper state (-1: open, 1: closed). Provide only next action as output, nothing else."
+            "Analyze the input image and predict robot actions for the next 5 timesteps. Each action has 7 dimensions. Output a single sequence of 35 integers (0 - 1000 each), representing the 5 timesteps sequentially. Provide only space-separated numbers. Nothing else."
+            # "Assume you are a robot control system. Analyze the input image, the task description and the current state to predict the robot's next action. The output should be a sequence of actions wherethe first three values represent 'dx', 'dy', 'dz' for the end-effector's positional movement, the next three values represent 'drx', 'dry', 'drz' for the end-effector's rotational movement, the seventh value indicates the gripper state (-1: open, 1: closed). Provide only next action as output, nothing else."
         )
         # self.prompt_template = "task description: {instruction}\n\nimage:\n<image>\n<image>"
         # self.prompt_template = "task description: {instruction}\n\nimage:\n<image>\n<image>"
@@ -116,52 +116,52 @@ class VLA0Policy:
         generated_ids_trimmed = generated_ids[:, inputs.input_ids.shape[1]:]
         output_text = self.processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True)[0]
 
-        # print("Generated Action Text:", output_text.strip())
+        print("Generated Action Text:", output_text.strip())
         # Generated Action Text: [ 0.321,  0.   ,  0.011,  0.   ,  0.015, -0.   , -1.   ]
         # convert the string to list of floats
-        action_floats = [float(x) for x in output_text.strip().strip('[]').split(',')]
-        action_array = np.array(action_floats)
+        # action_floats = [float(x) for x in output_text.strip().strip('[]').split(',')]
+        # action_array = np.array(action_floats)
 
         # import pdb; pdb.set_trace()
 
-        print("Action Array:", action_array)
+        # print("Action Array:", action_array)
 
-        self.prev_action = action_array
+        # self.prev_action = action_array
 
-        action = action_array - self.prev_action if self.prev_action is not None else np.zeros_like(action_array)
-        self.prev_action = action_array
+        # action = action_array - self.prev_action if self.prev_action is not None else np.zeros_like(action_array)
+        # self.prev_action = action_array
         
-        # # 4. Decode and unnormalize actions
-        # current_action_chunk = self._decode_and_unnormalize(output_text.strip()) # [35,]
+        # 4. Decode and unnormalize actions
+        current_action_chunk = self._decode_and_unnormalize(output_text.strip()) # [35,]
 
-        # # reshape to [5, 7] for 5 timesteps
-        # current_action_chunk = current_action_chunk.reshape(5, 7)
+        # reshape to [5, 7] for 5 timesteps
+        current_action_chunk = current_action_chunk.reshape(5, 7)
 
-        return action_array
+        # return action_array
 
-        # # 5. Ensemble predictions
-        # self.action_chunk_history.append(current_action_chunk)
+        # 5. Ensemble predictions
+        self.action_chunk_history.append(current_action_chunk)
 
-        # # Pop out the first action from each chunk and average them
-        # # Each chunk contains actions for multiple timesteps
-        # # after a pop operation, we average the first actions across all chunks
-        # # the last dim is gripper control, we only average the movement dimensions
-        # first_actions = np.array([chunk[0] for chunk in self.action_chunk_history])  # [ensemble_size, 7]
-        # # pop out the first action from each chunk
-        # for i in range(len(self.action_chunk_history)):
-        #     self.action_chunk_history[i] = self.action_chunk_history[i][1:]  # remove the first action
-        # averaged_first_action = np.mean(first_actions[:, :6], axis=0)  # [6,]
-        # gripper_actions = first_actions[:, 6]
-        # # majority voting for gripper action
-        # gripper_action = np.sign(np.sum(np.sign(gripper_actions)))
-        # averaged_action = np.concatenate([averaged_first_action, [gripper_action]], axis=0)  # [7,]
+        # Pop out the first action from each chunk and average them
+        # Each chunk contains actions for multiple timesteps
+        # after a pop operation, we average the first actions across all chunks
+        # the last dim is gripper control, we only average the movement dimensions
+        first_actions = np.array([chunk[0] for chunk in self.action_chunk_history])  # [ensemble_size, 7]
+        # pop out the first action from each chunk
+        for i in range(len(self.action_chunk_history)):
+            self.action_chunk_history[i] = self.action_chunk_history[i][1:]  # remove the first action
+        averaged_first_action = np.mean(first_actions[:, :6], axis=0)  # [6,]
+        gripper_actions = first_actions[:, 6]
+        # majority voting for gripper action
+        gripper_action = np.sign(np.sum(np.sign(gripper_actions)))
+        averaged_action = np.concatenate([averaged_first_action, [gripper_action]], axis=0)  # [7,]
 
-        # # return the averaged action
-        # return {"actions": averaged_action}
+        # return the averaged action
+        return averaged_action
 
 
 def main(
-    model_path: str = "/home/yuquan002/ssd/ms-swift-robotics/output/qwen3-vl-4b-instruct-vla0-libero/v9-20251107-182735/checkpoint-4096",
+    model_path: str = "/home/yuquan002/ssd/xyq_ws/ms-swift-robotics/output/qwen3-vl-4b-instruct-vla0-libero/v9-20251107-182735/checkpoint-4096",
     host: str = "0.0.0.0",
     port: int = 8000,
 ):
