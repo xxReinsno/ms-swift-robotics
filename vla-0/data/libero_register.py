@@ -6,22 +6,10 @@ from typing import Any, Dict, Optional
 from swift.llm import DatasetMeta, ResponsePreprocessor, register_dataset, load_dataset
 
 def random_masking(response: str, masking_ratio: float) -> str:
-    """
-    Randomly masks a portion of the response string based on the given masking ratio with '?' characters.
-    Only mask the numerical tokens in the response, not the spaces.
-    Args:
-        response: The original response string containing space-separated integers.
-        masking_ratio: The ratio of tokens to mask (between 0 and 1).
-    """
-    mask = '?'
-    tokens = response.split()
+    pass
 
 class VLA0LiberoPreprocessor(ResponsePreprocessor):
-    """
-    data example:
-    {"messages": [{"role": "system", "content": "Analyze the input image and predict robot actions for the next 1 timesteps. Each action has 7 dimensions. Output a single sequence of 7 integers (0 - 1000 each), representing the 5 timesteps sequentially. Provide only space-separated numbers. Nothing else."}, {"role": "user", "content": "task description: put the white mug on the left plate and put the yellow and white mug on the right plate<image><image>"}, {"role": "assistant", "content": "619 337 809 494 493 500 1000"}], "images": ["images/00000059_main.jpg", "images/00000059_wrist.jpg"]}
 
-    """
     def __init__(self, masking_ratio: float = 0.25, is_training: bool = True):
         """
         Args:

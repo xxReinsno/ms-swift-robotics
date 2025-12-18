@@ -14,6 +14,61 @@ from transformers.utils import strtobool
 from swift.utils import get_last_valid_indices
 
 
+########################################
+#### Common Loss Functions for VLA0 ####
+########################################
+
+def vla0_masked_loss(outputs,
+                     labels,
+                     loss_scale=None,
+                     num_items_in_batch=None,
+                     trainer=None,
+                     attention_mask=None,
+                     **kwargs) -> torch.Tensor:
+    """
+    outputs: 模型输出对象 (包含 logits)
+    labels: 标签 (batch, seq_len)
+    loss_scale: 由上面的 VLA0LossScale 生成的权重矩阵 (batch, seq_len)
+    trainer: 训练器对象 (用于访问 tokenizer)
+    num_items_in_batch: batch 中有效 token 数量 (用于归一化)
+    """
+    if trainer is None:
+        raise ValueError('trainer is required for generative_reranker_loss to access tokenizer')
+
+    logits = outputs.logits
+    tokenizer = trainer.processing_class
+    
+    # 强制约束：0-9, 空格, EOS
+    allowed_chars = [str(i) for i in range(10)] + [' ']
+    allowed_ids = set()
+    for char in allowed_chars:
+        allowed_ids.add(tokenizer.convert_tokens_to_ids(char))
+    allowed_ids.add(tokenizer.eos_token_id)
+    
+    mask = torch.full((logits.size(-1),), float('-inf'), device=logits.device)
+    mask[list(allowed_ids)] = 0
+    constrained_logits = logits + mask
+    
+    # 对齐 labels
+    shift_logits = constrained_logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+    
+    # 按照 vla0 逻辑：不设 label_smoothing, reduction 使用 sum 后除以 num_items
+    loss_fct = nn.CrossEntropyLoss(reduction='none', ignore_index=-100)
+    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+    
+    if loss_scale is not None:
+        shift_scale = loss_scale[..., 1:].contiguous().view(-1)
+        loss = loss * shift_scale
+
+    # 对齐 vla0.yaml 的 L2 (虽然 Swift 在 Optimizer 处理，但 Loss 需保证干净)
+    return loss.sum() / (num_items_in_batch if num_items_in_batch else 1)
+
+########################################
+#### Common Loss Functions for VLA0 ####
+########################################
+
+
 def cross_entropy_loss_func(outputs, labels, num_items_in_batch=None, **kwargs):
     # You need to return a scalar representing the loss.
     from swift.trainers import per_token_loss_func
@@ -819,6 +874,7 @@ loss_mapping = {
     'generative_reranker': generative_reranker_loss,
     'listwise_reranker': listwise_reranker_loss,
     'listwise_generative_reranker': listwise_generative_reranker_loss,
+    'vla0_loss': vla0_masked_loss,
 }
 
 

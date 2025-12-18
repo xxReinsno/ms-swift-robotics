@@ -164,6 +164,39 @@ class LastRoundWithIgnoreEmptyThink(LossScale):
         return super().get_loss_scale(context, context_type, is_last_round)
 
 
+
+####################################
+#### Common Loss Scale for VLA0 ####
+####################################
+
+class VLA0LossScale(LossScale):
+    loss_scale_config = "vla0.json"
+
+
+    def get_loss_scale(self, context: str, context_type: ContextType, 
+                       is_last_round: bool, **kwargs) -> Tuple[List[str], List[float]]:
+        """
+        ms-swift 会根据这个函数返回的 list[str] 进行 tokenize，并应用对应的权重 list[float]。
+        我们将 context 拆分为单个字符，如果字符是 '?'，权重设为 0。
+        """
+        if context_type == ContextType.RESPONSE:
+            # 字符级拆解逻辑
+            parts = []
+            scales = []
+            for char in context:
+                parts.append(char)
+                # vla0 逻辑：如果是 '?' 则不计算 loss
+                scales.append(0.0 if char == '?' else 1.0)
+            return parts, scales
+        
+        # 默认非 response 部分权重为 0（不计算 loss）
+        return super().get_loss_scale(context, context_type, is_last_round, **kwargs)
+
+####################################
+#### Common Loss Scale for VLA0 ####
+####################################
+
+
 # Add your loss scale here, use --loss_scale xxx to train
 loss_scale_map = {
     'last_round': LastRoundLossScale,
@@ -177,7 +210,9 @@ loss_scale_map = {
     'qwen': QwenLossScale,
     'agentflan': AgentFlanLossScale,
     'alpha_umi': AlphaUmiLossScale,
+    'vla0': VLA0LossScale,
 }
 
 for k, v in loss_scale_map.items():
     v.name = k
+
