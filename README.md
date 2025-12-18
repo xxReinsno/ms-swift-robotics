@@ -12,9 +12,9 @@
 </p>
 
 <p align="center">
-<img src="https://img.shields.io/badge/python-3.10-5be.svg">
+<img src="https://img.shields.io/badge/python-3.11-5be.svg">
 <img src="https://img.shields.io/badge/pytorch-%E2%89%A52.0-orange.svg">
-<a href="https://github.com/modelscope/modelscope/"><img src="https://img.shields.io/badge/modelscope-%E2%89%A51.19-5D91D4.svg"></a>
+<a href="https://github.com/modelscope/modelscope/"><img src="https://img.shields.io/badge/modelscope-%E2%89%A51.23-5D91D4.svg"></a>
 <a href="https://pypi.org/project/ms-swift/"><img src="https://badge.fury.io/py/ms-swift.svg"></a>
 <a href="https://github.com/modelscope/ms-swift/blob/main/LICENSE"><img src="https://img.shields.io/github/license/modelscope/ms-swift"></a>
 <a href="https://pepy.tech/project/ms-swift"><img src="https://pepy.tech/badge/ms-swift"></a>
@@ -132,15 +132,15 @@ Running Environment:
 | python       | >=3.9        | 3.10/3.11                |                                           |
 | cuda         |              | cuda12              | No need to install if using CPU, NPU, MPS |
 | torch        | >=2.0        | 2.8.0               |                                           |
-| transformers | >=4.33       | 4.57.1              |                                           |
+| transformers | >=4.33       | 4.57.3              |                                           |
 | modelscope   | >=1.23       |                     |                                           |
 | peft         | >=0.11,<0.19 |                     |                                           |
-| flash_attn   |              | 2.8.1/3.0.0b1 |                                           |
+| flash_attn   |              | 2.8.3/3.0.0b1 |                                           |
 | trl          | >=0.15,<0.25 | 0.23.1              | RLHF                                      |
 | deepspeed    | >=0.14       | 0.17.6              | Training                                  |
 | vllm         | >=0.5.1      | 0.11.0                | Inference/Deployment                      |
-| sglang       | >=0.4.6      | 0.5.4.post2         | Inference/Deployment                      |
-| lmdeploy     | >=0.5   | 0.10.2                 | Inference/Deployment                      |
+| sglang       | >=0.4.6      | 0.5.5.post3         | Inference/Deployment                      |
+| lmdeploy     | >=0.5   | 0.10.1                 | Inference/Deployment                      |
 | evalscope    | >=1.0       |                     | Evaluation                                |
 | gradio       |              | 5.32.1              | Web-UI/App                                |
 

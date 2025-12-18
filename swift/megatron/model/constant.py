@@ -2,7 +2,6 @@
 class LLMMegatronModelType:
     gpt = 'gpt'
     qwen3_next = 'qwen3_next'
-    gpt_oss = 'gpt_oss'
 
 
 class MLLMMegatronModelType:
@@ -17,6 +16,7 @@ class MLLMMegatronModelType:
     internvl_hf = 'internvl_hf'
     glm4_5v = 'glm4_5v'
     kimi_vl = 'kimi_vl'
+    llama4 = 'llama4'
 
 
 class MegatronModelType(LLMMegatronModelType, MLLMMegatronModelType):

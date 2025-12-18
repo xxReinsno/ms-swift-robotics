@@ -40,7 +40,7 @@ class MegatronSft(SwiftSft):
             if args.attention_backend != 'local':
                 # MindSpeed requires passing `use_flash_attn` to Megatron
                 # to enable flash attention on Ascend NPU.
-                self.args.use_flash_attn = True
+                args.use_flash_attn = True
             megatron_args = asdict(self.args)
             repatch(megatron_args)
         template_cls = TEMPLATE_MAPPING[args.template].template_cls
@@ -48,9 +48,8 @@ class MegatronSft(SwiftSft):
             kwargs = {'return_dummy_model': True}
         else:
             kwargs = {'load_model': False}
-        download_model = args.load_safetensors is not None
         with torch.device('meta'):
-            self.model, self.processor = args.get_model_processor(**kwargs, download_model=download_model)
+            self.model, self.processor = args.get_model_processor(**kwargs, download_model=args.load is None)
         self._prepare_template()
         args.init_model_args(self.tokenizer, self.processor.model_info.config)
         args.save_args(args.save)
@@ -76,7 +75,6 @@ class MegatronSft(SwiftSft):
 
         try:
             self.trainer.train(train_dataset, val_dataset, data_collator)
-            dist.barrier()  # Ensure all weights are saved completely
         finally:
             # Visualization
             if is_last_rank():

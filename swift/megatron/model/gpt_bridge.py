@@ -1,4 +1,5 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
+import math
 from copy import copy
 from typing import List, Optional, Union
 
@@ -6,6 +7,7 @@ import megatron.core
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
+import transformers
 from megatron.core import mpu
 from megatron.training import get_args
 from packaging import version
@@ -14,10 +16,9 @@ from tqdm import tqdm
 from transformers.modeling_utils import custom_object_save
 
 from swift.llm import deep_getattr, get_model_tokenizer, safe_snapshot_download, save_checkpoint
-from swift.llm.argument.base_args.quant_args import QuantizeArguments
-from swift.utils import get_logger, is_last_rank
+from swift.utils import get_logger, get_modules_to_not_convert, is_last_rank
 from ..tuners import LoraParallelLinear
-from ..utils import Fp8Dequantizer, MxFp4Dequantizer, SafetensorLazyLoader, StreamingSafetensorSaver
+from ..utils import MxFp4Dequantizer, SafetensorLazyLoader, StreamingSafetensorSaver
 
 logger = get_logger()
 
@@ -67,7 +68,7 @@ class GPTBridge:
         self.etp_rank = mpu.get_expert_tensor_parallel_rank()
         self.ep_rank = mpu.get_expert_model_parallel_rank()
 
-        self.fp8_quantizer = Fp8Dequantizer()
+        self._fp8_quantizer = None
         self.mxfp4_quantizer = MxFp4Dequantizer()
 
         dp_size = dist.get_world_size() // self.etp_size // self.ep_size // self.pp_size
@@ -179,23 +180,36 @@ class GPTBridge:
                     param.data.copy_(tensor)
                     param._high_precision_init_val.copy_(tensor)
                 else:
-                    scale_inv = hf_scale_inv[i]
                     tensor = tensor.view(torch.uint8)
                     param._rowwise_data.data.copy_(tensor)
-                    scale_inv = scale_inv.reshape(-1, scale_inv.shape[-1])
-                    if scale_inv.shape[-1] < param._rowwise_scale_inv.shape[-1]:
-                        scale_inv = torch.concat([
-                            scale_inv,
-                            scale_inv.new_zeros(
-                                (scale_inv.shape[0], param._rowwise_scale_inv.shape[-1] - scale_inv.shape[1]))
-                        ],
-                                                 dim=-1)
-                    param._rowwise_scale_inv.data.copy_(scale_inv)
+                    self._copy_scale_inv(param, hf_scale_inv[i])
                     del param.get_high_precision_init_val
             else:
                 if hf_scale_inv is not None:
-                    tensor = self.fp8_quantizer.convert(tensor, hf_scale_inv[i])
+                    fp8_tensor = self.fp8_quantizer.make_empty(tensor.shape)
+                    fp8_tensor._rowwise_data.copy_(tensor.view(torch.uint8))
+                    self._copy_scale_inv(fp8_tensor, hf_scale_inv[i])
+                    tensor = fp8_tensor
                 param.data.copy_(tensor)
+
+    @staticmethod
+    def _copy_scale_inv(tensor, scale_inv):
+        scale_inv = scale_inv.reshape(-1, scale_inv.shape[-1])
+        if scale_inv.shape[-1] < tensor._rowwise_scale_inv.shape[-1]:
+            scale_inv = torch.concat([
+                scale_inv,
+                scale_inv.new_zeros((scale_inv.shape[0], tensor._rowwise_scale_inv.shape[-1] - scale_inv.shape[1]))
+            ],
+                                     dim=-1)
+        tensor._rowwise_scale_inv.data.copy_(scale_inv)
+
+    @property
+    def fp8_quantizer(self):
+        if self._fp8_quantizer is None:
+            from transformer_engine_torch import DType as TE_DType
+            from transformer_engine.pytorch import Float8BlockQuantizer
+            self._fp8_quantizer = Float8BlockQuantizer(TE_DType.kFloat8E4M3, rowwise=True, columnwise=True)
+        return self._fp8_quantizer
 
     @staticmethod
     def _is_fp8_param(param):
@@ -255,7 +269,7 @@ class GPTBridge:
                     return {}
                 hf_state_dict = hf_state_dict or {k: None for k in meta_data[0]}
                 for k, v in hf_state_dict.items():
-                    v, _ = self._get_weight(deep_getattr(mg_module, k, None), None)
+                    v, _ = self._get_weight(v, None)
                     hf_state_dict[k] = v
             elif hf_state_dict is None:
                 return {}
@@ -351,7 +365,7 @@ class GPTBridge:
             mg_scale_inv = self._all_gather_tp(mg_scale_inv, tp_dim, is_expert)
             mg_scale_inv = self._broadcast_ep_pp(mg_scale_inv, is_expert)
             tensor = tensor.view(torch.float8_e4m3fn)
-            mg_scale_inv = mg_scale_inv[..., :tensor.shape[-1] // self.fp8_block_size].contiguous()
+            mg_scale_inv = mg_scale_inv[..., :math.ceil(tensor.shape[-1] / self.fp8_block_size)].contiguous()
         assert tensor is not None, f'mg_key: {mg_key}'
         if offset:
             assert mg_scale_inv is None, f'mg_key: {mg_key}'
@@ -610,7 +624,10 @@ class GPTBridge:
         else:
             hf_state_dict = {}
         args = self.args
-        hf_mlp = self.hf_layers[layer_idx].mlp
+        if hasattr(self.hf_layers[layer_idx], 'feed_forward'):
+            hf_mlp = self.hf_layers[layer_idx].feed_forward
+        else:
+            hf_mlp = self.hf_layers[layer_idx].mlp
         if hasattr(hf_mlp, 'router'):
             hf_gate_key = 'router.weight'
         elif hasattr(hf_mlp.gate, 'wg'):
@@ -668,7 +685,10 @@ class GPTBridge:
                        ep_rank: Optional[int] = None,
                        hf_mlp=None):
         if hf_mlp is None:
-            hf_mlp = self.hf_layers[layer_idx].mlp
+            if hasattr(self.hf_layers[layer_idx], 'feed_forward'):
+                hf_mlp = self.hf_layers[layer_idx].feed_forward
+            else:
+                hf_mlp = self.hf_layers[layer_idx].mlp
         is_expert = ep_rank is not None
         num_local_experts = 1
         hf_grouped = False
@@ -677,6 +697,12 @@ class GPTBridge:
             hf_grouped = not hasattr(hf_mlp.experts, '__len__')
             hf_mlp = hf_mlp.experts if hf_grouped else hf_mlp.experts[0]
             num_local_experts = args.num_experts // self.ep_size
+        # TODO: Temporary modification for transformers 5.0 compatibility with GLM4.6v, to be fixed later
+        is_gate_up = hasattr(hf_mlp, 'gate_up_proj')
+        if version.parse(
+                transformers.__version__) >= version.parse('5.0.0.dev') and self.args.hf_model_type == 'glm4_5v':
+            hf_grouped = False
+            is_gate_up = False
         if to_mcore or hf_grouped:
             hf_state_dict = self._remove_prefix(hf_state_dict, hf_prefix)
         else:
@@ -688,7 +714,7 @@ class GPTBridge:
                 mg_lora_B = mg_mlp.linear_fc1.lora_B[self._adapter_name]
                 mg_lora_B = [getattr(mg_lora_B, f'weight{i}')
                              for i in range(num_local_experts)] if is_expert else mg_lora_B.weight
-                if hasattr(hf_mlp, 'gate_up_proj'):
+                if is_gate_up:
                     if is_expert:
                         lora_A = torch.stack([
                             hf_state_dict[f'{i + ep_rank * num_local_experts}.gate_up_proj.lora_A.weight'].load()
@@ -741,7 +767,7 @@ class GPTBridge:
                     assert is_expert and not has_scale_inv, 'not support'  # TODO
                     fc1_bias = [getattr(mg_mlp.linear_fc1, f'bias{i}') for i in range(num_local_experts)]
                 gate_up_scale_inv = None
-                if hasattr(hf_mlp, 'gate_up_proj'):
+                if is_gate_up:
                     if is_expert:
                         if hf_grouped:
                             if 'gate_up_proj_blocks' in hf_state_dict:
@@ -857,7 +883,7 @@ class GPTBridge:
                 lora_B, _ = self._get_weight(
                     lora_B, f'linear_fc1.lora_B.{self._adapter_name}.weight', is_expert=is_expert)
                 if lora_A is not None:
-                    if hasattr(hf_mlp, 'gate_up_proj'):
+                    if is_gate_up:
                         self._peft_target_modules.update({'gate_up_proj'})
                         if is_expert:
                             for i in range(num_local_experts):
@@ -904,7 +930,7 @@ class GPTBridge:
                     gate_up_proj_bias, _ = self._get_weight(fc1_bias, 'linear_fc1.bias', is_expert=is_expert)
                 del fc1_weight
                 if gate_up_proj_weight is not None:
-                    if hasattr(hf_mlp, 'gate_up_proj'):
+                    if is_gate_up:
                         if is_expert:
                             if hf_grouped:
                                 gate_up_proj_weight = gate_up_proj_weight.transpose(1, 2)
@@ -1102,7 +1128,7 @@ class GPTBridge:
                                 if 'down_proj_scale_inv' in hf_state_dict:
                                     scale_inv = torch.concat([hf_state_dict['down_proj_scale_inv'], scale_inv], dim=0)
                                 hf_state_dict['down_proj_scale_inv'] = scale_inv.clone()
-                            if down_proj_bias is not None:
+                            if args.add_bias_linear:
                                 if 'down_proj_bias' in hf_state_dict:
                                     down_proj_bias = torch.concat([hf_state_dict['down_proj_bias'], down_proj_bias],
                                                                   dim=0)
@@ -1167,15 +1193,19 @@ class GPTBridge:
         return hf_state_dict
 
     def _set_layer_mlp(self, mg_layer, hf_state_dict, layer_idx: int, to_mcore: bool):
-        hf_mlp = self.hf_layers[layer_idx].mlp
+        if hasattr(self.hf_layers[layer_idx], 'feed_forward'):
+            hf_mlp_prefix = 'feed_forward'
+        else:
+            hf_mlp_prefix = 'mlp'
+        hf_mlp = getattr(self.hf_layers[layer_idx], hf_mlp_prefix)
         is_moe = self._is_moe(hf_mlp.state_dict())
         mg_mlp = None if mg_layer is None else mg_layer.mlp
         if is_moe:
-            hf_state_dict.update(self._set_moe_state(mg_mlp, hf_state_dict, 'mlp.', layer_idx, to_mcore))
+            hf_state_dict.update(self._set_moe_state(mg_mlp, hf_state_dict, f'{hf_mlp_prefix}.', layer_idx, to_mcore))
             self._set_state_dict(mg_layer, 'pre_mlp_layernorm.weight', hf_state_dict, 'post_attention_layernorm.weight',
                                  to_mcore)
         else:
-            hf_state_dict.update(self._set_mlp_state(mg_mlp, hf_state_dict, 'mlp.', layer_idx, to_mcore))
+            hf_state_dict.update(self._set_mlp_state(mg_mlp, hf_state_dict, f'{hf_mlp_prefix}.', layer_idx, to_mcore))
             self._set_state_dict(mg_layer, 'mlp.linear_fc1.layer_norm_weight', hf_state_dict,
                                  'post_attention_layernorm.weight', to_mcore)
         return hf_state_dict
@@ -1350,7 +1380,7 @@ class GPTBridge:
             hf_state_dict = {}
         self._convert_mtp_extra(mtp_layer, hf_state_dict, to_mcore, origin_hf_state_dict)
         transformer_layer = None if mtp_layer is None else mtp_layer.transformer_layer
-        if not to_mcore:
+        if not to_mcore and not self.args.hf_model_type.startswith('qwen3_next'):
             self._set_state_dict(lm_model, 'embedding.word_embeddings.weight', hf_state_dict, 'embed_tokens.weight',
                                  to_mcore)
             self._set_state_dict(lm_model, 'output_layer.weight', hf_state_dict, 'shared_head.head.weight', to_mcore)
@@ -1402,6 +1432,8 @@ class GPTBridge:
             if is_peft_format:
                 from swift.llm import get_multimodal_target_regex
                 peft_config = copy(mg_models[0].peft_config[self._adapter_name])
+                if args.task_type == 'seq_cls':
+                    peft_config.task_type = 'SEQ_CLS'
                 if args.is_multimodal and 'all-linear' in args.target_modules:
                     peft_config.target_modules = get_multimodal_target_regex(
                         self.hf_model,
@@ -1417,11 +1449,11 @@ class GPTBridge:
                 peft_config.modules_to_save = self._peft_modules_to_save
                 peft_config.save_pretrained(output_dir)
             else:
-                self.hf_model.config.vocab_size = self.args.padded_vocab_size
-                if self.args.fp8 is not None and self.args.fp8_recipe == 'blockwise':
-                    if self.hf_model.config.quantization_config is None:
+                self.hf_model.config.vocab_size = args.padded_vocab_size
+                if args.fp8 is not None and args.fp8_recipe == 'blockwise' and args.fp8_param_gather:
+                    if getattr(self.hf_model.config, 'quantization_config', None) is None:
                         from transformers.utils.quantization_config import FineGrainedFP8Config
-                        modules_to_not_convert = QuantizeArguments.get_modules_to_not_convert(self.hf_model)
+                        modules_to_not_convert = get_modules_to_not_convert(self.hf_model)
                         self.hf_model.config.quantization_config = FineGrainedFP8Config(
                             modules_to_not_convert=modules_to_not_convert)
                 elif hasattr(self.hf_model.config, 'quantization_config'):
@@ -1436,9 +1468,10 @@ class GPTBridge:
                     None,
                     self.processor,
                     output_dir,
-                    model_dirs=[self.args.model_dir],
+                    model_dirs=[args.model_dir],
                     additional_saved_files=self.hf_model.model_meta.additional_saved_files)
             logger.info_if(f'Successfully saved `safetensors` model weights in `{output_dir}`.', cond=is_last_rank())
+        dist.barrier()  # Ensure all weights are saved completely
 
 
 class MultimodalGPTBridge(GPTBridge):

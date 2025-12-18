@@ -27,7 +27,8 @@ from swift.llm.template.template_inputs import RolloutInferRequest
 from swift.plugin.multi_turn import RolloutScheduler, multi_turns
 from swift.trainers.rlhf_trainer.utils import (FlattenedTensorBucket, FlattenedTensorMetadata, TensorLoRARequest,
                                                UpdateAdapterRequest, UpdateFlattenedAdapterRequest,
-                                               UpdateFlattenedParamsRequest, patch_vllm_load_adapter)
+                                               UpdateFlattenedParamsRequest, check_vllm_version_ge,
+                                               patch_vllm_load_adapter)
 from swift.utils import get_logger
 from .infer_engine import GRPOVllmEngine, InferClient
 from .protocol import InitCommunicatorRequest, RequestConfig, UpdateWeightsRequest
@@ -77,7 +78,7 @@ class WeightSyncWorkerExtension(HFWeightSyncWorkerExtension):
 
         dtype = getattr(torch, dtype.split('.')[-1])
         # Allocate memory for the incoming weight tensor on the correct device.
-        weight = torch.empty(shape, dtype=dtype, device=self.device)
+        weight = torch.empty(shape, dtype=dtype, device=self._comm.device)
 
         # Use NCCL to broadcast the updated weights from the client (src) to all workers.
         self._comm.broadcast(weight, src=self.client_rank)
@@ -95,7 +96,7 @@ class WeightSyncWorkerExtension(HFWeightSyncWorkerExtension):
             raise RuntimeError('Communicator not initialized. Call `init_communicator` first.')
         flatten_tensor_length = metadatas[-1].end_idx
         dtype = getattr(torch, metadatas[-1].dtype.split('.')[-1])
-        flatten_tensor = torch.empty(flatten_tensor_length, dtype=dtype, device=self.device)
+        flatten_tensor = torch.empty(flatten_tensor_length, dtype=dtype, device=self._comm.device)
         self._comm.broadcast(flatten_tensor, src=self.client_rank)
         self._comm.group.barrier()
         flattened_tensor_bucket = FlattenedTensorBucket(metadata=metadatas, flattened_tensor=flatten_tensor)
@@ -127,7 +128,7 @@ class WeightSyncWorkerExtension(HFWeightSyncWorkerExtension):
             name = metadata['name']
             dtype = getattr(torch, metadata['dtype'].split('.')[-1])
             shape = tuple(metadata['shape'])
-            tensor = torch.empty(shape, dtype=dtype, device=self.device)
+            tensor = torch.empty(shape, dtype=dtype, device=self._comm.device)
             self._comm.broadcast(tensor, src=self.client_rank)
             named_params[name] = tensor
 
@@ -154,7 +155,7 @@ class WeightSyncWorkerExtension(HFWeightSyncWorkerExtension):
 
         flatten_tensor_length = metadatas[-1].end_idx
         dtype = getattr(torch, metadatas[-1].dtype.split('.')[-1])
-        flatten_tensor = torch.empty(flatten_tensor_length, dtype=dtype, device=self.device)
+        flatten_tensor = torch.empty(flatten_tensor_length, dtype=dtype, device=self._comm.device)
 
         self._comm.broadcast(flatten_tensor, src=self.client_rank)
         self._comm.group.barrier()
@@ -374,12 +375,14 @@ class SwiftRolloutDeploy(SwiftPipeline):
         kwargs.update({'enable_lora': args.vllm_enable_lora})  # override
         # Important: Use processed_logprobs so temperature scaling affects the logprobs
         # This is required for correct importance sampling in rollout correction
-        kwargs['logprobs_mode'] = 'processed_logprobs'
+        kwargs['logprobs_mode'] = 'processed_logprobs' if check_vllm_version_ge('0.10.2') else None
         # used for RL external rollout backend
         engine_kwargs = kwargs.get('engine_kwargs', {})
         # for RL rollout model weight sync
         engine_kwargs.update({'worker_extension_cls': 'swift.llm.infer.rollout.WeightSyncWorkerExtension'})
-        engine_kwargs['load_format'] = 'dummy'
+        # Use load_format from engine_kwargs if provided, otherwise default to 'dummy'
+        if 'load_format' not in engine_kwargs:
+            engine_kwargs['load_format'] = 'dummy'
         if args.vllm_use_async_engine and args.vllm_data_parallel_size > 1:
             engine_kwargs['data_parallel_size'] = args.vllm_data_parallel_size
         kwargs['engine_kwargs'] = engine_kwargs

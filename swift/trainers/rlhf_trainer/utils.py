@@ -1,10 +1,13 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import functools
+import ipaddress
 import math
 import os
+import socket
 import time
 from contextlib import contextmanager, nullcontext
 from dataclasses import asdict
+from datetime import timedelta
 from functools import partial
 from io import BytesIO
 from types import MethodType
@@ -14,6 +17,7 @@ import datasets
 import torch
 import torch.nn.functional as F
 from msgspec import field
+from packaging import version
 from peft.tuners import lora
 from peft.tuners.lora import LoraLayer
 from PIL import Image
@@ -35,6 +39,8 @@ if TYPE_CHECKING:
 T = TypeVar('T')
 
 TensorLoRARequest = None
+_ipv6_patch_applied = False
+
 if is_vllm_available():
     from vllm.lora.request import LoRARequest
 
@@ -50,6 +56,135 @@ if is_vllm_available():
         @property
         def embeddings(self):
             return self.lora_embeddings
+
+
+def is_valid_ipv6_address(address: str) -> bool:
+    """Check if the given address is a valid IPv6 address."""
+    try:
+        ipaddress.IPv6Address(address)
+        return True
+    except ValueError:
+        return False
+
+
+def format_host_for_url(host: str) -> str:
+    """Format host for URL - wrap IPv6 addresses in brackets."""
+    if is_valid_ipv6_address(host):
+        return f'[{host}]'
+    return host
+
+
+def resolve_hostname(hostname: str) -> str:
+    """Resolve hostname to IP address, supporting both IPv4 and IPv6.
+
+    Uses socket.getaddrinfo() which supports both IPv4 and IPv6,
+    unlike socket.gethostbyname() which only supports IPv4.
+    """
+    # If it's already an IP address (IPv4 or IPv6), return as-is
+    try:
+        ipaddress.ip_address(hostname)
+        return hostname
+    except ValueError:
+        pass
+
+    # Resolve hostname using getaddrinfo (supports both IPv4 and IPv6)
+    try:
+        addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if addr_info:
+            # Return the first resolved address
+            return addr_info[0][4][0]
+    except socket.gaierror:
+        pass
+
+    # Fallback to original hostname if resolution fails
+    return hostname
+
+
+def patch_stateless_process_group_for_ipv6():
+    """Apply monkey patch to vLLM's StatelessProcessGroup.create to support IPv6.
+
+    The original implementation hardcodes socket.AF_INET which only supports IPv4.
+    This patch detects IPv6 addresses at runtime and uses socket.AF_INET6 accordingly.
+    For IPv4 addresses, it falls back to the original implementation.
+
+    This function is idempotent - calling it multiple times is safe.
+    """
+    global _ipv6_patch_applied
+
+    if _ipv6_patch_applied:
+        return
+
+    if not is_vllm_available():
+        return
+
+    from torch.distributed import TCPStore
+    from vllm.distributed.utils import StatelessProcessGroup
+
+    # Save original method for fallback
+    _original_create = StatelessProcessGroup.create
+
+    @staticmethod
+    def _patched_stateless_pg_create(
+        host: str,
+        port: int,
+        rank: int,
+        world_size: int,
+        data_expiration_seconds: int = 3600,
+        store_timeout: int = 300,
+    ) -> StatelessProcessGroup:
+        """Patched version of StatelessProcessGroup.create that supports IPv6.
+
+        For IPv4 addresses, falls back to the original implementation.
+        """
+        # If not IPv6, use original implementation
+        if not is_valid_ipv6_address(host):
+            return _original_create(
+                host=host,
+                port=port,
+                rank=rank,
+                world_size=world_size,
+                data_expiration_seconds=data_expiration_seconds,
+                store_timeout=store_timeout,
+            )
+
+        # IPv6 path
+        launch_server = rank == 0
+        if launch_server:
+            listen_socket = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            listen_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listen_socket.bind((host, port))
+            listen_socket.listen()
+            listen_fd = listen_socket.fileno()
+        else:
+            listen_socket = None
+            listen_fd = None
+
+        store = TCPStore(
+            host_name=host,
+            port=port,
+            world_size=world_size,
+            is_master=launch_server,
+            timeout=timedelta(seconds=store_timeout),
+            use_libuv=False,
+            master_listen_fd=listen_fd,
+        )
+
+        return StatelessProcessGroup(
+            rank=rank,
+            world_size=world_size,
+            store=store,
+            socket=listen_socket,
+            data_expiration_seconds=data_expiration_seconds,
+        )
+
+    # Apply the monkey patch to vLLM
+    StatelessProcessGroup.create = _patched_stateless_pg_create
+
+    _ipv6_patch_applied = True
+
+
+# Apply IPv6 patch at module load time
+patch_stateless_process_group_for_ipv6()
 
 
 def nanstd(tensor: torch.Tensor) -> torch.Tensor:
@@ -609,7 +744,6 @@ def replace_assistant_response_with_ids(messages: 'Messages',
 
 def patch_save_last_checkpoint():
     import trl
-    from packaging import version
     if version.parse(trl.__version__) >= version.parse('0.20'):
         return
 
@@ -1017,7 +1151,7 @@ def compute_chord_loss(trainer, grpo_loss: torch.Tensor) -> torch.Tensor:
         chord_sft_loss = per_token_loss_func(outputs, labels)
 
         if trainer.args.chord_enable_phi_function:
-            per_token_probs = torch.exp(-chord_sft_loss)
+            per_token_probs = torch.exp(-chord_sft_loss.detach())
             phi = per_token_probs * (1 - per_token_probs)
             chord_sft_loss *= phi
 
@@ -1171,12 +1305,24 @@ def get_even_process_data(trainer, global_data: List[T]) -> List[T]:
     return global_data[start:end]
 
 
+def check_vllm_version_ge(min_version: str) -> bool:
+    """check if the vllm version is greater than or equal to the minimum version"""
+    if not is_vllm_available():
+        return False
+    import vllm
+    vllm_version = vllm.__version__
+    # if dev version, regard it as latest version
+    if vllm_version is None or 'dev' in vllm_version:
+        return True
+    return version.parse(vllm_version) >= version.parse(min_version)
+
+
 # ============================================================================
 # Padding-free utilities
 # ============================================================================
 
 
-def pad_logps_back_to_batch(logps_rmpad: torch.Tensor,
+def pad_logps_back_to_batch(logps_rmpad: Optional[torch.Tensor],
                             position_ids: Optional[torch.Tensor] = None,
                             logits_to_keep: int = None,
                             batch_size: int = None,
@@ -1186,11 +1332,11 @@ def pad_logps_back_to_batch(logps_rmpad: torch.Tensor,
     """
     Restore padding-free logprobs back to [batch_size, seq_len] shape with LEFT PADDING.
 
-    - Input: logps in rmpad format [1, total_nnz]
+    - Input: logps in rmpad format [1, total_nnz] or None
     - Output: logps in batch format [batch_size, max_seq_len] with data right-aligned
 
     Args:
-        logps_rmpad: [1, total_nnz] per-token log probabilities in padding_free format
+        logps_rmpad: [1, total_nnz] per-token log probabilities in padding_free format or None
         position_ids: [1, total_nnz] position ids to determine sequence boundaries (deprecated, use seq_lengths)
         logits_to_keep: number of tokens to keep per sequence (= max_seq_len)
         batch_size: number of sequences in the batch
@@ -1199,9 +1345,12 @@ def pad_logps_back_to_batch(logps_rmpad: torch.Tensor,
         pad_value: value to use for padding positions (default: -1e10 for logps, use 0.0 for masks)
 
     Returns:
-        logps_padded: [batch_size, logits_to_keep] padded log probabilities (left-padded, data right-aligned)
-        valid_mask: [batch_size, logits_to_keep] mask indicating valid (non-padding) positions
+        logps_padded: [batch_size, logits_to_keep] padded log probabilities (left-padded, data right-aligned) or None
+        valid_mask: [batch_size, logits_to_keep] mask indicating valid (non-padding) positions or None
     """
+    if logps_rmpad is None:
+        return None, None
+
     if dtype is None:
         dtype = logps_rmpad.dtype
 
